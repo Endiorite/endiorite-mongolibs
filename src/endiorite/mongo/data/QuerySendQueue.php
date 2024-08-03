@@ -17,12 +17,12 @@ class QuerySendQueue extends ThreadSafe
 		$this->queries = new ThreadSafeArray();
 	}
 
-	public function scheduleQuery(int $queryId, \Closure $closure, array $params): void {
+	public function scheduleQuery(int $queryId, \Closure $closure, array $params, array $options): void {
 		if($this->invalidated){
 			throw new QueueShutdownException("You cannot schedule a query on an invalidated queue.");
 		}
-		$this->synchronized(function() use ($queryId, $params, $closure) : void{
-			$this->queries[] = ThreadSafeArray::fromArray([$queryId, $closure, serialize($params)]);
+		$this->synchronized(function() use ($queryId, $params,$options, $closure) : void{
+			$this->queries[] = ThreadSafeArray::fromArray([$queryId, $closure, serialize($params), serialize($options)]);
 			$this->notifyOne();
 		});
 	}

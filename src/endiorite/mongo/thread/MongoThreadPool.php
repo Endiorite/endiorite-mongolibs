@@ -71,13 +71,13 @@ class MongoThreadPool implements IMongoThread {
 	/**
 	 * @param int $queryId
 	 * @param Closure $closure
-	 * @phpstan-param Closure(Client $client, array $args): array|object|null{} $closure
 	 * @param array $params
+	 * @param array $options
 	 * @return void
 	 * @throws QueueShutdownException
 	 */
-	public function addQuery(int $queryId, Closure $closure, array $params) : void{
-		$this->bufferSend->scheduleQuery($queryId, $closure, $params);
+	public function addQuery(int $queryId, Closure $closure, array $params, array $options) : void{
+		$this->bufferSend->scheduleQuery($queryId, $closure, $params, $options);
 
 		// check if we need to increase worker size
 		foreach($this->workers as $worker){

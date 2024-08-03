@@ -33,12 +33,13 @@ class DataConnectorImpl
 
 	/**
 	 * @param array $params
+	 * @param array $options
 	 * @param Closure $query
 	 * @param callable $handler
 	 * @param callable|null $onError
 	 * @throws QueueShutdownException
 	 */
-	public function executeRequest(array $params, Closure $query, callable $handler, ?callable $onError = null) : void{
+	public function executeRequest(array $params, array $options, Closure $query, callable $handler, ?callable $onError = null) : void{
 		$queryId = self::$queryId++;
 		$trace = libAsyncMongo::isPackaged() ? null : new Exception("(This is the original stack trace for the following error)");
 		$this->handlers[$queryId] = function(MongoError|MongoResult $results) use ($handler, $onError, $trace){
@@ -46,7 +47,7 @@ class DataConnectorImpl
 				$this->reportError($onError, $results, $trace);
 			}else{
 				try{
-					$handler($results->getValue());
+					$handler($results);
 				}catch(Exception $e){
 					if(!libAsyncMongo::isPackaged()){
 						$prop = (new ReflectionClass(Exception::class))->getProperty("trace");
@@ -86,7 +87,7 @@ class DataConnectorImpl
 			}
 		};
 
-		$this->threadPool->addQuery($queryId, $query, $params);
+		$this->threadPool->addQuery($queryId, $query, $params, $options);
 	}
 
 

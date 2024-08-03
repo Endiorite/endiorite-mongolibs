@@ -10,8 +10,15 @@ use endiorite\mongo\data\QuerySendQueue;
 use endiorite\mongo\exception\QueueShutdownException;
 use endiorite\mongo\libAsyncMongo;
 use endiorite\mongo\result\MongoError;
+use endiorite\mongo\result\MongoFindResult;
+use endiorite\mongo\result\MongoInsertResult;
 use endiorite\mongo\result\MongoResult;
+use endiorite\mongo\result\MongoUpdateResult;
 use MongoDB\Client as MongoClient;
+use MongoDB\InsertManyResult;
+use MongoDB\InsertOneResult;
+use MongoDB\Operation\ReplaceOne;
+use MongoDB\UpdateResult;
 use pmmp\thread\Thread as NativeThread;
 use pmmp\thread\ThreadSafeArray;
 use pocketmine\Server;
@@ -81,10 +88,11 @@ class MongoThread extends Thread
 				break;
 			}
 			$this->busy = true;
-			[$queryId, $closure, $params] = $row;
+			[$queryId, $closure, $params, $options] = $row;
 			try{
 				$params = unserialize($params, ["allowed_classes" => true]);
-				$this->bufferRecv->publishResult($queryId, new MongoResult($this->executeQuery($closure, $client,  $params)));
+				$options = unserialize($options, ["allowed_classes" => true]);
+				$this->bufferRecv->publishResult($queryId, $this->executeQuery($closure, $client,  $params,$options));
 			}catch(MongoError $error){
 				$this->bufferRecv->publishError($queryId, $error);
 			}
@@ -94,10 +102,18 @@ class MongoThread extends Thread
 		$client = null;
 	}
 
-	public function executeQuery(Closure $execute,MongoClient $mongo,  array $params): mixed
+	public function executeQuery(Closure $execute, MongoClient $mongo, array $params, array $options): mixed
 	{
 		try {
-			return $execute($mongo, $params);
+			$data = $execute($mongo, $params);
+			if ($data instanceof InsertManyResult || $data instanceof InsertOneResult){
+				$result = new MongoInsertResult($data, $options);
+			} else if ($data instanceof UpdateResult || $data instanceof ReplaceOne) {
+				$result = new MongoUpdateResult($data, $options);
+			} else{
+				$result = new MongoFindResult($data);
+			}
+			return $result;
 		}catch (Throwable $throwable) {
 			throw new MongoError(MongoError::STAGE_EXECUTE, $throwable->getMessage(), $params);
 		}
