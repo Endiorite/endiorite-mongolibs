@@ -2,10 +2,10 @@
 
 namespace endiorite\mongo\data;
 
+use endiorite\mongo\result\MongoError;
+use endiorite\mongo\result\MongoResult;
 use pmmp\thread\ThreadSafe;
 use pmmp\thread\ThreadSafeArray;
-use poggit\libasynql\SqlError;
-use poggit\libasynql\SqlResult;
 
 class QueryRecvQueue extends ThreadSafe
 {
@@ -19,16 +19,16 @@ class QueryRecvQueue extends ThreadSafe
 
 	/**
 	 * @param int $queryId
-	 * @param RedisResults $result
+	 * @param MongoResult $result
 	 */
-	public function publishResult(int $queryId, RedisResults $result) : void{
+	public function publishResult(int $queryId, MongoResult $result) : void{
 		$this->synchronized(function() use ($queryId, $result) : void{
 			$this->queue[] = serialize([$queryId, $result]);
 			$this->notify();
 		});
 	}
 
-	public function publishError(int $queryId, RedisError $error) : void{
+	public function publishError(int $queryId, MongoError $error) : void{
 		$this->synchronized(function() use ($error, $queryId) : void{
 			$this->queue[] = serialize([$queryId, $error]);
 			$this->notify();
@@ -45,7 +45,7 @@ class QueryRecvQueue extends ThreadSafe
 	}
 
 	/**
-	 * @param SqlError|RedisResults[]|null $results
+	 * @return array
 	 */
 	public function fetchAllResults(): array{
 		return $this->synchronized(function(): array{

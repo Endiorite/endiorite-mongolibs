@@ -5,5 +5,8 @@
         "ext-mongodb": "*",
         "ext-pmmpthread": "*",
         "ext-igbinary": "*"
+    },
+    "require-dev": {
+        "pocketmine/pocketmine-mp": "5.17.0"
     }
 }
