@@ -15,7 +15,7 @@ class MongoConfig
 
 	public static function parse(array $config): MongoConfig
 	{
-		return new self($config['uri'], $config['uri_options'], $config['driver_options'], $config['worker_limit'] ?? 1);
+		return new self($config['uri'], $config['uri_options'] ?? [], $config['driver_options'] ?? [], $config['worker_limit'] ?? 1);
 	}
 
 	/**
