@@ -11,6 +11,11 @@ readonly class MongoRequest
 	{
 	}
 
+	public static function create(array $params = [], array $optionsResult = []): self
+	{
+		return new self($params, $optionsResult);
+	}
+
 	/**
 	 * @return array
 	 */

@@ -9,12 +9,16 @@ use endiorite\mongo\data\QueryRecvQueue;
 use endiorite\mongo\data\QuerySendQueue;
 use endiorite\mongo\exception\QueueShutdownException;
 use endiorite\mongo\libAsyncMongo;
+use endiorite\mongo\result\MongoCursorResult;
+use endiorite\mongo\result\MongoDeleteResult;
 use endiorite\mongo\result\MongoError;
 use endiorite\mongo\result\MongoFindResult;
 use endiorite\mongo\result\MongoInsertResult;
 use endiorite\mongo\result\MongoResult;
 use endiorite\mongo\result\MongoUpdateResult;
 use MongoDB\Client as MongoClient;
+use MongoDB\DeleteResult;
+use MongoDB\Driver\Cursor;
 use MongoDB\InsertManyResult;
 use MongoDB\InsertOneResult;
 use MongoDB\Operation\ReplaceOne;
@@ -110,6 +114,10 @@ class MongoThread extends Thread
 				$result = new MongoInsertResult($data, $options);
 			} else if ($data instanceof UpdateResult || $data instanceof ReplaceOne) {
 				$result = new MongoUpdateResult($data, $options);
+			} else if ($data instanceof DeleteResult) {
+				$result = new MongoDeleteResult($data, $options);
+			} else if ($data instanceof Cursor) {
+				$result = new MongoCursorResult($data, $options);
 			} else{
 				$result = new MongoFindResult($data);
 			}
