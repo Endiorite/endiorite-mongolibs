@@ -3,7 +3,7 @@
 
 namespace endiorite\mongo\interface;
 
-interface SqlThread {
+interface MongoThread {
 
 	public function stopRunning(): void;
 

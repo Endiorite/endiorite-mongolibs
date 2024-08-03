@@ -2,6 +2,8 @@
     "name": "endiorite/endiorite-mongolibs",
     "require": {
         "mongodb/mongodb": "^1.19",
-        "ext-mongodb": "*"
+        "ext-mongodb": "*",
+        "ext-pmmpthread": "*",
+        "ext-igbinary": "*"
     }
 }
