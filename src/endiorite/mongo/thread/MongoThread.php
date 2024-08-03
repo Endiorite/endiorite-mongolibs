@@ -86,4 +86,9 @@ class MongoThread extends Thread
 			throw new MongoError($throwable->getMessage(), $throwable->getCode(), $throwable);
 		}
 	}
+
+	public function stopRunning(): void {
+		$this->bufferSend->invalidate();
+		parent::quit();
+	}
 }

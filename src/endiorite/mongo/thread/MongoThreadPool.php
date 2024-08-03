@@ -51,16 +51,42 @@ class MongoThreadPool implements IMongoThread {
 	}
 	public function stopRunning(): void
 	{
-		$this->bufferSend->invalidate();
+		//$this->bufferSend->invalidate();
+		/** @var MongoThread[] $worker */
+		foreach($this->workers as $worker) {
+			$worker->stopRunning(); // $this->bufferSend->invalidate();
+		}
 	}
 
 	public function quit(): void
 	{
 		$this->stopRunning();
 	}
-	private function addQuery(int $queryId, array $params, \Closure $query)
+	private function addQuery(int $queryId, array $modes, array $queries, array $params): void
 	{
+		$this->bufferSend->scheduleQuery($queryId, $modes, $queries, $params);
+	}
 
+	public function join(): void {
+		/** @var MongoThread|] $worker */
+		foreach($this->workers as $worker) {
+			$worker->join();
+		}
+	}
+
+	public function readResults(array &$callbacks, ?int $expectedResults): void {
+		if($expectedResults === null ){
+			$resultsLists = $this->bufferRecv->fetchAllResults();
+		} else {
+			$resultsLists = $this->bufferRecv->waitForResults($expectedResults);
+		}
+		foreach($resultsLists as [$queryId, $results]) {
+			if(!isset($callbacks[$queryId])) {
+				throw new \InvalidArgumentException("Missing handler for query (#$queryId)");
+			}
+			$callbacks[$queryId]($results);
+			unset($callbacks[$queryId]);
+		}
 	}
 
 }
