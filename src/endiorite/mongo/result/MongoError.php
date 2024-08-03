@@ -20,7 +20,6 @@ class MongoError extends RuntimeException {
 
 	private string $stage;
 	private string $errorMessage;
-	private ?string $query;
 	private ?array $args;
 
 	public function __construct(string $stage, string $errorMessage, array $args = null){
@@ -49,16 +48,6 @@ class MongoError extends RuntimeException {
 	public function getErrorMessage() : string{
 		return $this->errorMessage;
 	}
-
-	/**
-	 * Returns the original query
-	 *
-	 * @return string|null
-	 */
-	public function getQuery() : ?string{
-		return $this->query;
-	}
-
 	/**
 	 * Returns the original arguments passed to the query
 	 *

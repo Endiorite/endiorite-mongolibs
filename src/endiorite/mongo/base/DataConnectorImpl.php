@@ -39,13 +39,15 @@ class DataConnectorImpl
 	 * @param callable|null $onError
 	 * @throws QueueShutdownException
 	 */
-	public function executeRequest(array $params, array $options, Closure $query, callable $handler, ?callable $onError = null) : void{
+	public function executeRequest(MongoRequest $mongoRequest, Closure $query, ?callable $handler = null, ?callable $onError = null) : void{
 		$queryId = self::$queryId++;
 		$trace = libAsyncMongo::isPackaged() ? null : new Exception("(This is the original stack trace for the following error)");
 		$this->handlers[$queryId] = function(MongoError|MongoResult $results) use ($handler, $onError, $trace){
 			if($results instanceof MongoError){
 				$this->reportError($onError, $results, $trace);
 			}else{
+				if ($handler === null)
+					return ;
 				try{
 					$handler($results);
 				}catch(Exception $e){
@@ -87,7 +89,7 @@ class DataConnectorImpl
 			}
 		};
 
-		$this->threadPool->addQuery($queryId, $query, $params, $options);
+		$this->threadPool->addQuery($queryId, $query, $mongoRequest->getParams(), $mongoRequest->getOptionsResult());
 	}
 
 
@@ -103,9 +105,6 @@ class DataConnectorImpl
 		}
 		if($error !== null){
 			$this->logger->error($error->getMessage());
-			if($error->getQuery() !== null){
-				$this->logger->debug("Query: " . $error->getQuery());
-			}
 			if($error->getArgs() !== null){
 				$this->logger->debug("Args: " . json_encode($error->getArgs()));
 			}
