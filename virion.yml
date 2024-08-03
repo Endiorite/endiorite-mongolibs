@@ -1,0 +1,8 @@
+name: endiorite-mongolibs
+antigen: endiorite\mongo
+version: 1.0.0
+php:
+  - "8.2"
+authors:
+  - SenseiTarzan
+  - JblusItsMe
