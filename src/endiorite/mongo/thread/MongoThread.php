@@ -3,41 +3,57 @@
 namespace endiorite\mongo\thread;
 
 use Closure;
+use Composer\Autoload\ClassLoader;
 use endiorite\mongo\base\MongoConfig;
 use endiorite\mongo\data\QueryRecvQueue;
 use endiorite\mongo\data\QuerySendQueue;
+use endiorite\mongo\exception\QueueShutdownException;
+use endiorite\mongo\libAsyncMongo;
 use endiorite\mongo\result\MongoError;
 use endiorite\mongo\result\MongoResult;
-use http\Exception\InvalidArgumentException;
 use MongoDB\Client as MongoClient;
+use pmmp\thread\Thread as NativeThread;
 use pmmp\thread\ThreadSafeArray;
+use pocketmine\Server;
 use pocketmine\snooze\SleeperHandlerEntry;
 use pocketmine\thread\Thread;
-use SenseiTarzan\SyncManager\Thread\data\RedisError;
 use Throwable;
 
 class MongoThread extends Thread
 {
 
-	private SleeperHandlerEntry $sleeperEntry;
+	private static int $nextSlaveNumber = 0;
+
+	private readonly int $slaveId;
 	private bool $busy = false;
+	protected bool $connCreated = false;
+	protected ?string $connError = null;
 	private string $uriOptions;
 	private string $driverOptions;
 
 	private string $url;
 
 	public function __construct(
-		SleeperHandlerEntry $entry,
-		private QuerySendQueue $bufferSend,
-		private QueryRecvQueue $bufferRecv,
-		MongoConfig $config
+		private readonly SleeperHandlerEntry $sleeperEntry,
+		private readonly QuerySendQueue      $bufferSend,
+		private readonly QueryRecvQueue      $bufferRecv,
+		MongoConfig                          $config
 	)
 	{
-		$this->sleeperEntry = $entry;
+		$this->slaveId = self::$nextSlaveNumber++;
 		$this->url = $config->getUri();
 		$this->uriOptions = igbinary_serialize($config->getUriOptions());
 		$this->driverOptions = igbinary_serialize($config->getDriverOptions());
+		if(!libAsyncMongo::isPackaged()){
+			/** @noinspection PhpUndefinedMethodInspection */
+			/** @noinspection NullPointerExceptionInspection */
+			/** @var ClassLoader $cl */
+			$cl = Server::getInstance()->getPluginManager()->getPlugin("DEVirion")->getVirionClassLoader();
+			$this->setClassLoaders([Server::getInstance()->getLoader(), $cl]);
+		}
+		$this->start(NativeThread::INHERIT_INI);
 	}
+
 
 	public function createConnection(): MongoClient
 	{
@@ -49,11 +65,15 @@ class MongoThread extends Thread
 
 	protected function onRun(): void
 	{
+		require_once dirname(__DIR__, 4) . '/vendor/autoload.php';
 		$notifier = $this->sleeperEntry->createNotifier();
 		try {
 			$client = $this->createConnection();
+			$this->connCreated = true;
 		} catch (Throwable $exception){
-			throw new MongoError(MongoError::STAGE_CONNECT, $exception);
+			$this->connError = $exception;
+			$this->connCreated = true;
+			return;
 		}
 		while(true) {
 			$row = $this->bufferSend->fetchQuery();
@@ -61,10 +81,10 @@ class MongoThread extends Thread
 				break;
 			}
 			$this->busy = true;
-			[$queryId, $params, $closure] = $row;
+			[$queryId, $closure, $params] = $row;
 			try{
 				$params = unserialize($params, ["allowed_classes" => true]);
-				$this->bufferRecv->publishResult($queryId, new MongoResult($this->executeQuery($client, $params, $closure)));
+				$this->bufferRecv->publishResult($queryId, new MongoResult($this->executeQuery($closure, $client,  $params)));
 			}catch(MongoError $error){
 				$this->bufferRecv->publishError($queryId, $error);
 			}
@@ -74,21 +94,49 @@ class MongoThread extends Thread
 		$client = null;
 	}
 
-	public function addQuery(int $queryId, array $params, Closure $query) : void{
-		$this->bufferSend->scheduleQuery($queryId, $params, $query);
-	}
-
-	public function executeQuery(MongoClient $mongo, array $params, Closure $execute): mixed
+	public function executeQuery(Closure $execute,MongoClient $mongo,  array $params): mixed
 	{
 		try {
 			return $execute($mongo, $params);
 		}catch (Throwable $throwable) {
-			throw new MongoError($throwable->getMessage(), $throwable->getCode(), $throwable);
+			throw new MongoError(MongoError::STAGE_EXECUTE, $throwable->getMessage(), $params);
 		}
 	}
 
 	public function stopRunning(): void {
 		$this->bufferSend->invalidate();
+		parent::quit();
+	}
+
+	/**
+	 * @return int
+	 */
+	public function getSlaveId(): int
+	{
+		return $this->slaveId;
+	}
+
+	public function connCreated() : bool{
+		return $this->connCreated;
+	}
+
+	public function hasConnError() : bool{
+		return $this->connError !== null;
+	}
+
+	public function getConnError() : ?string{
+		return $this->connError;
+	}
+
+	/**
+	 * @return bool
+	 */
+	public function isBusy() : bool{
+		return $this->busy;
+	}
+
+	public function quit() : void{
+		$this->stopRunning();
 		parent::quit();
 	}
 }

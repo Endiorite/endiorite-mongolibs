@@ -2,36 +2,43 @@
 
 namespace endiorite\mongo\base;
 
+use Closure;
+use endiorite\mongo\exception\QueueShutdownException;
 use endiorite\mongo\libAsyncMongo;
 use endiorite\mongo\result\MongoError;
 use endiorite\mongo\result\MongoResult;
 use endiorite\mongo\thread\MongoThreadPool;
+use Error;
+use Exception;
 use pocketmine\plugin\Plugin;
 use pocketmine\utils\Terminal;
+use ReflectionClass;
 
 class DataConnectorImpl
 {
 
 	private array $handlers = [];
+	private static int $queryId = 0;
+	private readonly \AttachableLogger $logger;
 
 	public function __construct(
 		Plugin $plugin,
-		MongoThreadPool $threadPool
+		private readonly MongoThreadPool $threadPool
 	)
 	{
+		$this->logger = $plugin->getLogger();
 		$threadPool->setDataConnector($this);
 	}
 
 
-
 	/**
-	 * @param array $queries
-	 * @param array $args
-	 * @param array $modes
+	 * @param array $params
+	 * @param Closure $query
 	 * @param callable $handler
 	 * @param callable|null $onError
+	 * @throws QueueShutdownException
 	 */
-	public function executeRequest(array $params, \Closure $query, callable $handler, ?callable $onError = null) : void{
+	public function executeRequest(array $params, Closure $query, callable $handler, ?callable $onError = null) : void{
 		$queryId = self::$queryId++;
 		$trace = libAsyncMongo::isPackaged() ? null : new Exception("(This is the original stack trace for the following error)");
 		$this->handlers[$queryId] = function(MongoError|MongoResult $results) use ($handler, $onError, $trace){
@@ -79,25 +86,7 @@ class DataConnectorImpl
 			}
 		};
 
-		$this->addQuery($queryId, $params, $query);
-	}
-
-
-
-	public function readResults(array &$callbacks, ?int $expectedResults) : void{
-		if($expectedResults === null){
-			$resultsList = $this->bufferRecv->fetchAllResults();
-		}else{
-			$resultsList = $this->bufferRecv->waitForResults($expectedResults);
-		}
-		foreach($resultsList as [$queryId, $results]){
-			if(!isset($callbacks[$queryId])){
-				throw new InvalidArgumentException("Missing handler for query #$queryId");
-			}
-
-			$callbacks[$queryId]($results);
-			unset($callbacks[$queryId]);
-		}
+		$this->threadPool->addQuery($queryId, $query, $params);
 	}
 
 
@@ -112,8 +101,6 @@ class DataConnectorImpl
 			}
 		}
 		if($error !== null){
-			if ($this->logger === null)
-				return ;
 			$this->logger->error($error->getMessage());
 			if($error->getQuery() !== null){
 				$this->logger->debug("Query: " . $error->getQuery());
@@ -132,18 +119,12 @@ class DataConnectorImpl
 
 	public function waitAll() : void{
 		while(!empty($this->handlers)){
-			$this->readResults($this->handlers, count($this->handlers));
+			$this->threadPool->readResults($this->handlers, count($this->handlers));
 		}
 	}
 
 	public function checkResults() : void{
-		$this->readResults($this->handlers, null);
-	}
-
-
-	private function addQuery(int $queryId, array $params, \Closure $query)
-	{
-
+		$this->threadPool->readResults($this->handlers, null);
 	}
 
 }

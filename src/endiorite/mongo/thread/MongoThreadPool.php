@@ -3,27 +3,20 @@
 
 namespace endiorite\mongo\thread;
 
+use Closure;
 use endiorite\mongo\base\DataConnectorImpl;
+use endiorite\mongo\base\MongoConfig;
 use endiorite\mongo\data\QueryRecvQueue;
 use endiorite\mongo\data\QuerySendQueue;
+use endiorite\mongo\exception\QueueShutdownException;
 use endiorite\mongo\interface\IMongoThread;
-use endiorite\mongo\libAsyncMongo;
-use endiorite\mongo\result\MongoError;
-use endiorite\mongo\result\MongoResult;
-use Error;
-use Exception;
 use MongoDB\Client;
 use pocketmine\Server;
 use pocketmine\snooze\SleeperHandlerEntry;
-use pocketmine\utils\Terminal;
-use ReflectionClass;
 
 class MongoThreadPool implements IMongoThread {
 
 	private SleeperHandlerEntry $sleeperHandlerEntry;
-
-	private static int $queryId = 0;
-
 	/**
 	 * @var MongoThread[]
 	 */
@@ -31,6 +24,10 @@ class MongoThreadPool implements IMongoThread {
 	private QuerySendQueue $bufferSend;
 	private QueryRecvQueue $bufferRecv;
 	private DataConnectorImpl $dataConnector;
+
+	private int $workerCount = 0;
+
+	private int $workerLimit;
 
 
 	/**
@@ -40,14 +37,22 @@ class MongoThreadPool implements IMongoThread {
 		$this->dataConnector = $dataConnector;
 	}
 	public function __construct(
-		private \AttachableLogger $logger,
-		private string $url,
-		private int $workerLimit = 1
+		private readonly MongoConfig $config
 	) {
 		$this->sleeperHandlerEntry = Server::getInstance()->getTickSleeper()->addNotifier(function(): void {
 			assert($this->dataConnector instanceof DataConnectorImpl); // otherwise, wtf
 			$this->dataConnector->checkResults();
 		});
+		$this->bufferSend = new QuerySendQueue();
+		$this->bufferRecv = new QueryRecvQueue();
+		$this->workerLimit = $this->config->getWorkerLimit();
+		$this->addWorker();
+	}
+
+	public function addWorker(): void
+	{
+		++$this->workerCount;
+		$this->workers[] = new MongoThread($this->sleeperHandlerEntry, $this->bufferSend, $this->bufferRecv, $this->config);
 	}
 	public function stopRunning(): void
 	{
@@ -62,13 +67,31 @@ class MongoThreadPool implements IMongoThread {
 	{
 		$this->stopRunning();
 	}
-	private function addQuery(int $queryId, array $modes, array $queries, array $params): void
-	{
-		$this->bufferSend->scheduleQuery($queryId, $modes, $queries, $params);
+
+	/**
+	 * @param int $queryId
+	 * @param Closure $closure
+	 * @phpstan-param Closure(Client $client, array $args): array|object|null{} $closure
+	 * @param array $params
+	 * @return void
+	 * @throws QueueShutdownException
+	 */
+	public function addQuery(int $queryId, Closure $closure, array $params) : void{
+		$this->bufferSend->scheduleQuery($queryId, $closure, $params);
+
+		// check if we need to increase worker size
+		foreach($this->workers as $worker){
+			if(!$worker->isBusy()){
+				return;
+			}
+		}
+		if($this->workerCount < $this->workerLimit){
+			$this->addWorker();
+		}
 	}
 
 	public function join(): void {
-		/** @var MongoThread|] $worker */
+		/** @var MongoThread[] $worker */
 		foreach($this->workers as $worker) {
 			$worker->join();
 		}
@@ -87,6 +110,22 @@ class MongoThreadPool implements IMongoThread {
 			$callbacks[$queryId]($results);
 			unset($callbacks[$queryId]);
 		}
+	}
+
+	public function connCreated() : bool{
+		return $this->workers[0]->connCreated();
+	}
+
+	public function hasConnError() : bool{
+		return $this->workers[0]->hasConnError();
+	}
+
+	public function getConnError() : ?string{
+		return $this->workers[0]->getConnError();
+	}
+
+	public function getLoad() : float{
+		return $this->bufferSend->count() / (float) $this->workerLimit;
 	}
 
 }

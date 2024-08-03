@@ -23,13 +23,12 @@ class MongoError extends RuntimeException {
 	private ?string $query;
 	private ?array $args;
 
-	public function __construct(string $stage, string $errorMessage, string $query = null, array $args = null){
+	public function __construct(string $stage, string $errorMessage, array $args = null){
 		$this->stage = $stage;
 		$this->errorMessage = $errorMessage;
-		$this->query = $query;
 		$this->args = $args;
 
-		parent::__construct("SQL $stage error: $errorMessage" . ($query === null ? "" : (", for query $query | " . json_encode($args))));
+		parent::__construct("MongoDB $stage error: $errorMessage" . json_encode($args));
 		$this->flattenTrace();
 	}
 
@@ -98,6 +97,5 @@ class MongoError extends RuntimeException {
 			unset($call);
 			$traceProperty->setValue($this, $trace);
 		}while($exception = $this->getPrevious());
-		$traceProperty->setAccessible(false);
 	}
 }

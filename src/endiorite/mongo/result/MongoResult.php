@@ -2,8 +2,6 @@
 
 namespace endiorite\mongo\result;
 
-use MongoDB\Model\BSONDocument;
-
 readonly class MongoResult
 {
 	public function __construct(

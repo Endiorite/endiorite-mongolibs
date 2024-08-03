@@ -58,7 +58,7 @@ class QueryRecvQueue extends ThreadSafe
 	}
 
 	/**
-	 * @return list<array{int, SqlError|RedisResults[]|null}>
+	 * @return list<array{int, MongoError|MongoResult|null}>
 	 */
 	public function waitForResults(int $expectedResults): array{
 		return $this->synchronized(function() use ($expectedResults) : array{
