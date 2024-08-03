@@ -2,11 +2,11 @@
 
 namespace endiorite\mongo\result;
 
-readonly class MongoFindResult
+class MongoFindResult extends MongoResult
 {
 
 	public function __construct(
-		private array|object|null $result
+		private readonly array|object|null $result
 	)
 	{
 	}
